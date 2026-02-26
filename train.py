@@ -12,15 +12,19 @@ random.seed(42)
 class HousePriceModel(nn.Module):
     def __init__(self):
         super().__init__()
-        self.fc1 = nn.Linear(3, 16)
-        self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(16, 1)
+        # Deep Neural Network with 3 hidden layers
+        self.network = nn.Sequential(
+            nn.Linear(3, 64),
+            nn.ReLU(),
+            nn.Linear(64, 32),
+            nn.ReLU(),
+            nn.Linear(32, 16),
+            nn.ReLU(),
+            nn.Linear(16, 1)
+        )
         
     def forward(self, x):
-        x = self.fc1(x)
-        x = self.relu(x)
-        x = self.fc2(x)
-        return x
+        return self.network(x)
 
 def generate_data(num_samples):
     X = []
@@ -56,10 +60,10 @@ if __name__ == "__main__":
     
     model = HousePriceModel()
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.01)
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
     
-    print("Training model...")
-    epochs = 50
+    print("Training Deep Neural Network...")
+    epochs = 100
     for epoch in range(epochs):
         model.train()
         total_loss = 0
@@ -71,16 +75,16 @@ if __name__ == "__main__":
             optimizer.step()
             total_loss += loss.item()
             
-        if (epoch + 1) % 10 == 0:
-            print(f"Epoch {epoch+1}/{epochs}, Loss: {total_loss/len(train_loader):.4f}")
+        if (epoch + 1) % 20 == 0:
+            print(f"Epoch {epoch+1}/{epochs}, Loss: {total_loss/len(train_loader):.6f}")
             
     # Test evaluation
     model.eval()
     with torch.no_grad():
         test_predictions = model(X_test)
         test_loss = criterion(test_predictions, y_test)
-        print(f"Test Loss: {test_loss.item():.4f}")
+        print(f"Test Loss: {test_loss.item():.6f}")
         
     # Save the model
     torch.save(model.state_dict(), "house_model.pth")
-    print("Model saved to house_model.pth")
+    print("Deep model saved to house_model.pth")
