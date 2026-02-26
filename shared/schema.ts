@@ -1,18 +1,13 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+export const predictionRequestSchema = z.object({
+  sqft: z.coerce.number().min(100, "Square footage must be at least 100").max(20000, "Square footage must be less than 20000"),
+  age: z.coerce.number().min(0, "Age must be at least 0").max(200, "Age must be less than 200"),
+  rooms: z.coerce.number().min(1, "Must have at least 1 room").max(50, "Must have less than 50 rooms"),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-});
+export type PredictionRequest = z.infer<typeof predictionRequestSchema>;
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+export type PredictionResponse = {
+  predictedPrice: number;
+};
