@@ -4,6 +4,7 @@ import { api } from "@shared/routes";
 import { z } from "zod";
 import { exec } from "child_process";
 import util from "util";
+import path from "path";
 
 const execAsync = util.promisify(exec);
 
@@ -15,28 +16,26 @@ export async function registerRoutes(
   app.post(api.predict.path, async (req, res) => {
     try {
       const input = api.predict.input.parse(req.body);
-      
-      // Execute the python script with the input parameters
-      const { stdout, stderr } = await execAsync(`python predict.py ${input.sqft} ${input.age} ${input.rooms}`);
-      
-      try {
-        const result = JSON.parse(stdout);
-        if (result.error) {
-          return res.status(500).json({ message: result.error });
-        }
-        res.status(200).json(result);
-      } catch (parseError) {
-        console.error("Failed to parse python output:", stdout, stderr);
-        res.status(500).json({ message: "Failed to parse model output" });
-      }
+      const { stdout } = await execAsync(`python predict.py ${input.sqft} ${input.age} ${input.rooms}`);
+      const result = JSON.parse(stdout);
+      if (result.error) return res.status(500).json({ message: result.error });
+      res.status(200).json(result);
     } catch (err) {
-      if (err instanceof z.ZodError) {
-        return res.status(400).json({
-          message: err.errors[0].message,
-          field: err.errors[0].path.join('.'),
-        });
-      }
-      res.status(500).json({ message: "Internal server error" });
+      res.status(500).json({ message: "Prediction failed" });
+    }
+  });
+
+  app.post(api.train.path, async (req, res) => {
+    try {
+      const input = api.train.input.parse(req.body);
+      await execAsync(`python train.py ${input.samples} ${input.noise} ${input.epochs}`);
+      res.status(200).json({ 
+        success: true, 
+        message: "Model retrained successfully",
+        lossCurveUrl: `/loss_curve.png?t=${Date.now()}`
+      });
+    } catch (err) {
+      res.status(500).json({ message: "Training failed" });
     }
   });
 

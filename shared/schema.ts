@@ -1,12 +1,19 @@
 import { z } from "zod";
 
 export const predictionRequestSchema = z.object({
-  sqft: z.coerce.number().min(100, "Square footage must be at least 100").max(20000, "Square footage must be less than 20000"),
-  age: z.coerce.number().min(0, "Age must be at least 0").max(200, "Age must be less than 200"),
-  rooms: z.coerce.number().min(1, "Must have at least 1 room").max(50, "Must have less than 50 rooms"),
+  sqft: z.coerce.number().min(100),
+  age: z.coerce.number().min(0),
+  rooms: z.coerce.number().min(1),
+});
+
+export const trainRequestSchema = z.object({
+  samples: z.coerce.number().min(100).max(10000).default(5000),
+  noise: z.coerce.number().min(0).max(1).default(0.1),
+  epochs: z.coerce.number().min(10).max(200).default(50),
 });
 
 export type PredictionRequest = z.infer<typeof predictionRequestSchema>;
+export type TrainRequest = z.infer<typeof trainRequestSchema>;
 
 export type PredictionResponse = {
   predictedPrice: number;

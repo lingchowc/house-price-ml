@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { predictionRequestSchema } from './schema';
+import { predictionRequestSchema, trainRequestSchema } from './schema';
 
 export const errorSchemas = {
   validation: z.object({
@@ -18,6 +18,16 @@ export const api = {
     input: predictionRequestSchema,
     responses: {
       200: z.object({ predictedPrice: z.number() }),
+      400: errorSchemas.validation,
+      500: errorSchemas.internal,
+    },
+  },
+  train: {
+    method: 'POST' as const,
+    path: '/api/train' as const,
+    input: trainRequestSchema,
+    responses: {
+      200: z.object({ success: z.boolean(), message: z.string(), lossCurveUrl: z.string() }),
       400: errorSchemas.validation,
       500: errorSchemas.internal,
     },

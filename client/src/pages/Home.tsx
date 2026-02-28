@@ -1,44 +1,77 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { predictionRequestSchema, type PredictionRequest } from "@shared/schema";
-import { usePredict } from "@/hooks/use-predict";
+import { predictionRequestSchema, trainRequestSchema, type PredictionRequest, type TrainRequest } from "@shared/schema";
+import { api } from "@shared/routes";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Brain, Home as HomeIcon, Code, Settings2, Activity, Calculator } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
-import { Building2, Calculator, AlertCircle, RefreshCcw, SquareAsterisk, DoorClosed, CalendarDays } from "lucide-react";
+
+const CODE_SNIPPET = `class HousePriceModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.network = nn.Sequential(
+            nn.Linear(3, 64),
+            nn.ReLU(),
+            nn.Linear(64, 32),
+            nn.ReLU(),
+            nn.Linear(32, 16),
+            nn.ReLU(),
+            nn.Linear(16, 1)
+        )
+    
+    def forward(self, x):
+        return self.network(x)
+
+# Optimizer: Adam (Adaptive Moment Estimation)
+# Chosen because it computes adaptive learning rates for each parameter,
+# combining the benefits of AdaGrad and RMSProp for faster convergence.
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+criterion = nn.MSELoss() # Best for continuous regression`;
 
 export default function Home() {
-  const [predictedPrice, setPredictedPrice] = useState<number | null>(null);
-  
-  const { mutate: predictPrice, isPending, error, reset } = usePredict();
+  const { toast } = useToast();
+  const [prediction, setPrediction] = useState<number | null>(null);
+  const [lossCurve, setLossCurve] = useState<string>("/loss_curve.png");
 
-  const form = useForm<PredictionRequest>({
+  const predictForm = useForm<PredictionRequest>({
     resolver: zodResolver(predictionRequestSchema),
-    defaultValues: {
-      sqft: 2000,
-      age: 10,
-      rooms: 3,
-    },
+    defaultValues: { sqft: 2000, age: 10, rooms: 3 }
   });
 
-  // Watch values to clear result if user starts typing again
-  useEffect(() => {
-    const subscription = form.watch(() => {
-      if (predictedPrice !== null) {
-        setPredictedPrice(null);
-        reset();
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, [form, predictedPrice, reset]);
+  const trainForm = useForm<TrainRequest>({
+    resolver: zodResolver(trainRequestSchema),
+    defaultValues: { samples: 5000, noise: 0.1, epochs: 50 }
+  });
 
-  const onSubmit = (data: PredictionRequest) => {
-    setPredictedPrice(null);
-    predictPrice(data, {
-      onSuccess: (response) => {
-        setPredictedPrice(response.predictedPrice);
-      },
-    });
-  };
+  const predictMutation = useMutation({
+    mutationFn: async (data: PredictionRequest) => {
+      const res = await apiRequest("POST", api.predict.path, data);
+      return res.json();
+    },
+    onSuccess: (data) => setPrediction(data.predictedPrice),
+    onError: () => toast({ variant: "destructive", title: "Prediction failed" })
+  });
+
+  const trainMutation = useMutation({
+    mutationFn: async (data: TrainRequest) => {
+      const res = await apiRequest("POST", api.train.path, data);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setLossCurve(`${data.lossCurveUrl}?t=${Date.now()}`);
+      toast({ title: "Model retrained!", description: data.message });
+    },
+    onError: () => toast({ variant: "destructive", title: "Training failed" })
+  });
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -49,181 +82,208 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center p-4 sm:p-6 overflow-hidden bg-background">
-      {/* Subtle background grid and gradients */}
-      <div className="absolute inset-0 bg-grid-pattern opacity-[0.4] mix-blend-multiply pointer-events-none" />
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-[500px] bg-primary/5 blur-[120px] rounded-full pointer-events-none" />
+    <div className="min-h-screen bg-background p-4 sm:p-6 lg:p-12">
+      <div className="max-w-6xl mx-auto space-y-8">
+        <header className="text-center space-y-2">
+          <motion.h1 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-4xl font-bold tracking-tight sm:text-5xl"
+          >
+            House Price Intelligence
+          </motion.h1>
+          <motion.p 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+            className="text-muted-foreground text-lg"
+          >
+            Deep Neural Network Regression with PyTorch
+          </motion.p>
+        </header>
 
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full max-w-lg relative z-10"
-      >
-        <div className="bg-card/80 backdrop-blur-2xl border border-border/50 shadow-2xl shadow-black/5 rounded-3xl overflow-hidden flex flex-col">
-          
-          {/* Header */}
-          <div className="p-8 sm:p-10 pb-6 text-center border-b border-border/40 bg-gradient-to-b from-muted/30 to-transparent">
-            <div className="w-14 h-14 bg-primary/5 text-primary rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-inner">
-              <Building2 className="w-7 h-7" />
-            </div>
-            <h1 className="text-3xl font-display font-semibold tracking-tight text-foreground mb-2">
-              Property Valuation
-            </h1>
-            <p className="text-muted-foreground text-sm font-medium">
-              Enter the property details below to generate an AI-driven market estimate.
-            </p>
-          </div>
+        <Tabs defaultValue="predict" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4 mb-8">
+            <TabsTrigger value="predict" className="gap-2"><HomeIcon className="w-4 h-4" /> Predict</TabsTrigger>
+            <TabsTrigger value="train" className="gap-2"><Settings2 className="w-4 h-4" /> Training Setup</TabsTrigger>
+            <TabsTrigger value="analytics" className="gap-2"><Activity className="w-4 h-4" /> Performance</TabsTrigger>
+            <TabsTrigger value="code" className="gap-2"><Code className="w-4 h-4" /> Architecture</TabsTrigger>
+          </TabsList>
 
-          {/* Form Content */}
-          <div className="p-8 sm:p-10">
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              
-              <div className="space-y-5">
-                {/* Square Footage Input */}
-                <div className="space-y-2 relative group">
-                  <label htmlFor="sqft" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground ml-1">
-                    Square Footage
-                  </label>
-                  <div className="relative">
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors">
-                      <SquareAsterisk className="w-5 h-5" />
-                    </div>
-                    <input
-                      id="sqft"
-                      type="number"
-                      {...form.register("sqft")}
-                      className="w-full h-14 pl-12 pr-4 bg-background border border-border rounded-xl text-foreground font-medium placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all shadow-sm"
-                      placeholder="e.g. 2500"
-                    />
-                  </div>
-                  {form.formState.errors.sqft && (
-                    <p className="text-sm text-destructive font-medium mt-1 flex items-center gap-1.5">
-                      <AlertCircle className="w-4 h-4" />
-                      {form.formState.errors.sqft.message}
-                    </p>
-                  )}
-                </div>
+          <TabsContent value="predict">
+            <div className="grid md:grid-cols-2 gap-8">
+              <Card className="border-border/50 shadow-xl shadow-black/5 rounded-3xl overflow-hidden">
+                <CardHeader>
+                  <CardTitle>Estimation Parameters</CardTitle>
+                  <CardDescription>Enter house features to generate a valuation</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Form {...predictForm}>
+                    <form onSubmit={predictForm.handleSubmit((data) => predictMutation.mutate(data))} className="space-y-4">
+                      <FormField control={predictForm.control} name="sqft" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Square Footage</FormLabel>
+                          <FormControl><Input type="number" {...field} className="h-12 rounded-xl" /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={predictForm.control} name="age" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>House Age (Years)</FormLabel>
+                          <FormControl><Input type="number" {...field} className="h-12 rounded-xl" /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={predictForm.control} name="rooms" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Number of Rooms</FormLabel>
+                          <FormControl><Input type="number" {...field} className="h-12 rounded-xl" /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <Button type="submit" className="w-full h-12 rounded-xl shadow-lg shadow-primary/20" disabled={predictMutation.isPending}>
+                        {predictMutation.isPending ? "Calculating..." : "Generate Estimate"}
+                      </Button>
+                    </form>
+                  </Form>
+                </CardContent>
+              </Card>
 
-                <div className="grid grid-cols-2 gap-5">
-                  {/* Age Input */}
-                  <div className="space-y-2 relative group">
-                    <label htmlFor="age" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground ml-1">
-                      Age (Years)
-                    </label>
-                    <div className="relative">
-                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors">
-                        <CalendarDays className="w-5 h-5" />
+              <Card className="flex flex-col items-center justify-center p-8 bg-primary/5 border-dashed border-2 rounded-3xl min-h-[300px]">
+                <AnimatePresence mode="wait">
+                  {prediction !== null ? (
+                    <motion.div 
+                      key="result"
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="text-center space-y-4"
+                    >
+                      <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Estimated Market Value</p>
+                      <div className="text-5xl sm:text-6xl font-bold text-primary tracking-tighter">
+                        {formatCurrency(prediction)}
                       </div>
-                      <input
-                        id="age"
-                        type="number"
-                        {...form.register("age")}
-                        className="w-full h-14 pl-12 pr-4 bg-background border border-border rounded-xl text-foreground font-medium placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all shadow-sm"
-                        placeholder="e.g. 15"
-                      />
-                    </div>
-                    {form.formState.errors.age && (
-                      <p className="text-sm text-destructive font-medium mt-1 flex items-center gap-1.5">
-                        <AlertCircle className="w-4 h-4" />
-                        {form.formState.errors.age.message}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Rooms Input */}
-                  <div className="space-y-2 relative group">
-                    <label htmlFor="rooms" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground ml-1">
-                      Total Rooms
-                    </label>
-                    <div className="relative">
-                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors">
-                        <DoorClosed className="w-5 h-5" />
-                      </div>
-                      <input
-                        id="rooms"
-                        type="number"
-                        {...form.register("rooms")}
-                        className="w-full h-14 pl-12 pr-4 bg-background border border-border rounded-xl text-foreground font-medium placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all shadow-sm"
-                        placeholder="e.g. 4"
-                      />
-                    </div>
-                    {form.formState.errors.rooms && (
-                      <p className="text-sm text-destructive font-medium mt-1 flex items-center gap-1.5">
-                        <AlertCircle className="w-4 h-4" />
-                        {form.formState.errors.rooms.message}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {error && (
-                <div className="p-4 rounded-xl bg-destructive/10 text-destructive text-sm font-medium flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 shrink-0" />
-                  <p>{error.message}</p>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={isPending}
-                className="relative w-full h-14 bg-primary text-primary-foreground font-semibold rounded-xl shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 hover:-translate-y-0.5 active:translate-y-0 active:shadow-md transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none overflow-hidden group"
-              >
-                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />
-                <span className="relative flex items-center justify-center gap-2">
-                  {isPending ? (
-                    <>
-                      <RefreshCcw className="w-5 h-5 animate-spin" />
-                      Analyzing Data...
-                    </>
+                      <p className="text-xs text-muted-foreground italic">Based on current deep learning weights</p>
+                    </motion.div>
                   ) : (
-                    <>
-                      <Calculator className="w-5 h-5" />
-                      Calculate Estimate
-                    </>
+                    <motion.div 
+                      key="placeholder"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="text-center text-muted-foreground"
+                    >
+                      <Brain className="w-16 h-16 mx-auto mb-4 opacity-10" />
+                      <p className="font-medium">Enter parameters to start valuation</p>
+                    </motion.div>
                   )}
-                </span>
-              </button>
-            </form>
-          </div>
+                </AnimatePresence>
+              </Card>
+            </div>
+          </TabsContent>
 
-          {/* Result Section */}
-          <AnimatePresence>
-            {predictedPrice !== null && (
-              <motion.div
-                initial={{ opacity: 0, height: 0, scale: 0.95 }}
-                animate={{ opacity: 1, height: "auto", scale: 1 }}
-                exit={{ opacity: 0, height: 0, scale: 0.95 }}
-                transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-                className="border-t border-border/50 bg-primary/5 overflow-hidden"
-              >
-                <div className="p-8 sm:p-10 text-center">
-                  <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                    Estimated Market Value
-                  </p>
-                  <motion.div 
-                    initial={{ y: 10, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ delay: 0.2, duration: 0.4 }}
-                    className="text-5xl sm:text-6xl font-display font-bold tracking-tighter text-foreground"
-                  >
-                    {formatCurrency(predictedPrice)}
-                  </motion.div>
-                  <p className="mt-4 text-sm text-muted-foreground max-w-xs mx-auto">
-                    This is an algorithmic estimate based on provided parameters and synthetic market data patterns.
-                  </p>
+          <TabsContent value="train">
+            <Card className="border-border/50 shadow-xl shadow-black/5 rounded-3xl">
+              <CardHeader>
+                <CardTitle>Retraining Simulation</CardTitle>
+                <CardDescription>Adjust data generation parameters to retrain the neural network</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Form {...trainForm}>
+                  <form onSubmit={trainForm.handleSubmit((data) => trainMutation.mutate(data))} className="space-y-8">
+                    <FormField control={trainForm.control} name="samples" render={({ field }) => (
+                      <FormItem>
+                        <div className="flex justify-between items-center mb-2">
+                          <FormLabel className="text-base">Data Samples</FormLabel>
+                          <span className="text-sm font-mono font-bold text-primary bg-primary/10 px-2 py-1 rounded">{field.value}</span>
+                        </div>
+                        <FormControl>
+                          <Slider min={100} max={10000} step={100} value={[field.value]} onValueChange={(v) => field.onChange(v[0])} />
+                        </FormControl>
+                      </FormItem>
+                    )} />
+                    <FormField control={trainForm.control} name="noise" render={({ field }) => (
+                      <FormItem>
+                        <div className="flex justify-between items-center mb-2">
+                          <FormLabel className="text-base">Noise Level (Uncertainty)</FormLabel>
+                          <span className="text-sm font-mono font-bold text-primary bg-primary/10 px-2 py-1 rounded">{(field.value * 100).toFixed(0)}%</span>
+                        </div>
+                        <FormControl>
+                          <Slider min={0} max={1} step={0.05} value={[field.value]} onValueChange={(v) => field.onChange(v[0])} />
+                        </FormControl>
+                      </FormItem>
+                    )} />
+                    <FormField control={trainForm.control} name="epochs" render={({ field }) => (
+                      <FormItem>
+                        <div className="flex justify-between items-center mb-2">
+                          <FormLabel className="text-base">Training Epochs</FormLabel>
+                          <span className="text-sm font-mono font-bold text-primary bg-primary/10 px-2 py-1 rounded">{field.value}</span>
+                        </div>
+                        <FormControl>
+                          <Slider min={10} max={200} step={10} value={[field.value]} onValueChange={(v) => field.onChange(v[0])} />
+                        </FormControl>
+                      </FormItem>
+                    )} />
+                    <Button type="submit" variant="secondary" className="w-full h-12 rounded-xl" disabled={trainMutation.isPending}>
+                      {trainMutation.isPending ? (
+                        <span className="flex items-center gap-2"><RefreshCcw className="w-4 h-4 animate-spin" /> Retraining Weights...</span>
+                      ) : "Re-Initialize & Train Model"}
+                    </Button>
+                  </form>
+                </Form>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="analytics">
+            <Card className="border-border/50 shadow-xl shadow-black/5 rounded-3xl overflow-hidden">
+              <CardHeader>
+                <CardTitle>Loss Convergence</CardTitle>
+                <CardDescription>Visualization of Mean Squared Error (MSE) over training iterations</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col items-center bg-white p-6">
+                <img key={lossCurve} src={lossCurve} alt="Loss Curve" className="max-w-full h-auto rounded-xl border border-border/20 shadow-sm" />
+                <div className="mt-6 p-4 bg-muted/30 rounded-xl text-sm text-muted-foreground max-w-2xl text-center italic">
+                  "The loss curve represents the model's 'pain' or error. As it decreases, the model is successfully learning the underlying patterns of the property market."
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        </div>
-        
-        <p className="text-center text-xs text-muted-foreground/60 mt-6 font-medium">
-          Powered by Synthetic Intelligence Models
-        </p>
-      </motion.div>
+          <TabsContent value="code">
+            <Card className="bg-slate-950 text-slate-50 border-none rounded-3xl overflow-hidden shadow-2xl">
+              <CardHeader className="border-b border-slate-800/50">
+                <CardTitle className="text-slate-50 flex items-center gap-2 font-mono"><Code className="w-5 h-5 text-blue-400" /> model.py</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <pre className="text-sm font-mono overflow-x-auto p-6 bg-slate-950/50 leading-relaxed">
+                  <code className="text-blue-200">{CODE_SNIPPET}</code>
+                </pre>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   );
+}
+
+function RefreshCcw(props: any) {
+  return (
+    <svg
+      {...props}
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+      <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+      <path d="M16 16h5v5" />
+    </svg>
+  )
 }
