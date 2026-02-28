@@ -181,10 +181,18 @@ const t = {
 
 type Lang = "zh" | "en";
 
+const IS_STATIC_MODEL = import.meta.env.VITE_STATIC_MODEL === "true";
+const BASE_URL = import.meta.env.BASE_URL;
+
+function estimatePrice(data: PredictionRequest): number {
+  const basePrice = 50000 + data.sqft * 150 - data.age * 500 + data.rooms * 10000;
+  return Math.max(10000, basePrice);
+}
+
 export default function Home() {
   const { toast } = useToast();
   const [prediction, setPrediction] = useState<number | null>(null);
-  const [lossCurve, setLossCurve] = useState<string>("/loss_curve.png");
+  const [lossCurve, setLossCurve] = useState<string>(`${BASE_URL}loss_curve.png`);
   const [lang, setLang] = useState<Lang>("zh");
   const l = t[lang];
 
@@ -200,6 +208,9 @@ export default function Home() {
 
   const predictMutation = useMutation({
     mutationFn: async (data: PredictionRequest) => {
+      if (IS_STATIC_MODEL) {
+        return { predictedPrice: estimatePrice(data) };
+      }
       const res = await apiRequest("POST", api.predict.path, data);
       return res.json();
     },
@@ -209,11 +220,20 @@ export default function Home() {
 
   const trainMutation = useMutation({
     mutationFn: async (data: TrainRequest) => {
+      if (IS_STATIC_MODEL) {
+        return {
+          success: true,
+          message: "GitHub Pages mode: training requires the backend server.",
+          lossCurveUrl: `${BASE_URL}loss_curve.png`,
+        };
+      }
       const res = await apiRequest("POST", api.train.path, data);
       return res.json();
     },
     onSuccess: (data) => {
-      const newUrl = `/loss_curve.png?t=${new Date().getTime()}`;
+      const newUrl = IS_STATIC_MODEL
+        ? data.lossCurveUrl
+        : `${BASE_URL}loss_curve.png?t=${new Date().getTime()}`;
       setLossCurve(newUrl);
       toast({ title: "Model retrained!", description: data.message });
     },
@@ -259,6 +279,15 @@ export default function Home() {
             {l.headerSub}
           </motion.p>
         </header>
+
+        {IS_STATIC_MODEL && (
+          <Card className="border-amber-300 bg-amber-50">
+            <CardContent className="pt-6 text-sm text-amber-900">
+              GitHub Pages mode is active. Prediction runs in-browser using the training formula,
+              while retraining is available only when running the backend server.
+            </CardContent>
+          </Card>
+        )}
 
         <Tabs defaultValue="predict" className="w-full">
           <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4 mb-8">
