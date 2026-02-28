@@ -7,6 +7,7 @@ import util from "util";
 import path from "path";
 
 const execAsync = util.promisify(exec);
+const venvPython = path.join(process.cwd(), ".venv", "bin", "python");
 
 export async function registerRoutes(
   httpServer: Server,
@@ -16,7 +17,7 @@ export async function registerRoutes(
   app.post(api.predict.path, async (req, res) => {
     try {
       const input = api.predict.input.parse(req.body);
-      const { stdout } = await execAsync(`python predict.py ${input.sqft} ${input.age} ${input.rooms}`);
+      const { stdout } = await execAsync(`${venvPython} predict.py ${input.sqft} ${input.age} ${input.rooms}`);
       const result = JSON.parse(stdout);
       if (result.error) return res.status(500).json({ message: result.error });
       res.status(200).json(result);
@@ -28,7 +29,7 @@ export async function registerRoutes(
   app.post(api.train.path, async (req, res) => {
     try {
       const input = api.train.input.parse(req.body);
-      await execAsync(`python train.py ${input.samples} ${input.noise} ${input.epochs}`);
+      await execAsync(`${venvPython} train.py ${input.samples} ${input.noise} ${input.epochs}`);
       res.status(200).json({ 
         success: true, 
         message: "Model retrained successfully",
