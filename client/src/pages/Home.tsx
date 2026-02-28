@@ -29,13 +29,20 @@ const CODE_SNIPPET = `class HousePriceModel(nn.Module):
         )
     
     def forward(self, x):
+        # 1. Input Layer: 3 features (sqft, age, rooms)
+        # 2. Hidden Layer 1: 64 neurons + ReLU
+        # 3. Hidden Layer 2: 32 neurons + ReLU
+        # 4. Output Layer: 1 neuron (price prediction)
         return self.network(x)
 
+# Why ReLU?
+# Linear operations alone (W1x + b1) only result in linear transformations.
+# ReLU (Rectified Linear Unit) introduces non-linearity, allowing the 
+# network to learn complex patterns like diminishing returns on square footage.
+
 # Optimizer: Adam (Adaptive Moment Estimation)
-# Chosen because it computes adaptive learning rates for each parameter,
-# combining the benefits of AdaGrad and RMSProp for faster convergence.
 optimizer = optim.Adam(model.parameters(), lr=0.001)
-criterion = nn.MSELoss() # Best for continuous regression`;
+criterion = nn.MSELoss()`;
 
 export default function Home() {
   const { toast } = useToast();
@@ -67,7 +74,9 @@ export default function Home() {
       return res.json();
     },
     onSuccess: (data) => {
-      setLossCurve(`${data.lossCurveUrl}?t=${Date.now()}`);
+      // Force refresh the image by appending a unique timestamp
+      const newUrl = `/loss_curve.png?t=${new Date().getTime()}`;
+      setLossCurve(newUrl);
       toast({ title: "Model retrained!", description: data.message });
     },
     onError: () => toast({ variant: "destructive", title: "Training failed" })
@@ -88,9 +97,9 @@ export default function Home() {
           <motion.h1 
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-4xl font-bold tracking-tight sm:text-5xl"
+            className="text-4xl font-bold tracking-tight sm:text-5xl flex items-center justify-center gap-3"
           >
-            House Price Intelligence
+            <Brain className="w-10 h-10 text-primary" /> 深度神經網路架構
           </motion.h1>
           <motion.p 
             initial={{ opacity: 0 }}
@@ -98,7 +107,7 @@ export default function Home() {
             transition={{ delay: 0.2 }}
             className="text-muted-foreground text-lg"
           >
-            Deep Neural Network Regression with PyTorch
+            House Price Intelligence - Deep Learning Model
           </motion.p>
         </header>
 
@@ -107,42 +116,42 @@ export default function Home() {
             <TabsTrigger value="predict" className="gap-2"><HomeIcon className="w-4 h-4" /> Predict</TabsTrigger>
             <TabsTrigger value="train" className="gap-2"><Settings2 className="w-4 h-4" /> Training Setup</TabsTrigger>
             <TabsTrigger value="analytics" className="gap-2"><Activity className="w-4 h-4" /> Performance</TabsTrigger>
-            <TabsTrigger value="code" className="gap-2"><Code className="w-4 h-4" /> Architecture</TabsTrigger>
+            <TabsTrigger value="code" className="gap-2"><Code className="w-4 h-4" /> Model Summary</TabsTrigger>
           </TabsList>
 
           <TabsContent value="predict">
             <div className="grid md:grid-cols-2 gap-8">
               <Card className="border-border/50 shadow-xl shadow-black/5 rounded-3xl overflow-hidden">
                 <CardHeader>
-                  <CardTitle>Estimation Parameters</CardTitle>
-                  <CardDescription>Enter house features to generate a valuation</CardDescription>
+                  <CardTitle>模型參數 (Model Inputs)</CardTitle>
+                  <CardDescription>輸入房屋特徵：坪數、屋齡、房間數</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Form {...predictForm}>
                     <form onSubmit={predictForm.handleSubmit((data) => predictMutation.mutate(data))} className="space-y-4">
                       <FormField control={predictForm.control} name="sqft" render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Square Footage</FormLabel>
+                          <FormLabel>坪數 (Square Footage)</FormLabel>
                           <FormControl><Input type="number" {...field} className="h-12 rounded-xl" /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )} />
                       <FormField control={predictForm.control} name="age" render={({ field }) => (
                         <FormItem>
-                          <FormLabel>House Age (Years)</FormLabel>
+                          <FormLabel>屋齡 (House Age)</FormLabel>
                           <FormControl><Input type="number" {...field} className="h-12 rounded-xl" /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )} />
                       <FormField control={predictForm.control} name="rooms" render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Number of Rooms</FormLabel>
+                          <FormLabel>房間數 (Rooms)</FormLabel>
                           <FormControl><Input type="number" {...field} className="h-12 rounded-xl" /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )} />
                       <Button type="submit" className="w-full h-12 rounded-xl shadow-lg shadow-primary/20" disabled={predictMutation.isPending}>
-                        {predictMutation.isPending ? "Calculating..." : "Generate Estimate"}
+                        {predictMutation.isPending ? "預測中..." : "開始預測 (Predict)"}
                       </Button>
                     </form>
                   </Form>
@@ -158,11 +167,14 @@ export default function Home() {
                       animate={{ opacity: 1, scale: 1 }}
                       className="text-center space-y-4"
                     >
-                      <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Estimated Market Value</p>
+                      <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">預測連續數值 (價格)</p>
                       <div className="text-5xl sm:text-6xl font-bold text-primary tracking-tighter">
                         {formatCurrency(prediction)}
                       </div>
-                      <p className="text-xs text-muted-foreground italic">Based on current deep learning weights</p>
+                      <div className="bg-green-100 text-green-700 px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2">
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                        深度神經網路模型已定義，預測成功
+                      </div>
                     </motion.div>
                   ) : (
                     <motion.div 
@@ -171,8 +183,8 @@ export default function Home() {
                       animate={{ opacity: 1 }}
                       className="text-center text-muted-foreground"
                     >
-                      <Brain className="w-16 h-16 mx-auto mb-4 opacity-10" />
-                      <p className="font-medium">Enter parameters to start valuation</p>
+                      <Calculator className="w-16 h-16 mx-auto mb-4 opacity-10" />
+                      <p className="font-medium">請輸入參數以進行估價</p>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -183,8 +195,8 @@ export default function Home() {
           <TabsContent value="train">
             <Card className="border-border/50 shadow-xl shadow-black/5 rounded-3xl">
               <CardHeader>
-                <CardTitle>Retraining Simulation</CardTitle>
-                <CardDescription>Adjust data generation parameters to retrain the neural network</CardDescription>
+                <CardTitle>訓練模擬 (Training Setup)</CardTitle>
+                <CardDescription>調整數據生成參數與訓練輪數</CardDescription>
               </CardHeader>
               <CardContent>
                 <Form {...trainForm}>
@@ -192,7 +204,7 @@ export default function Home() {
                     <FormField control={trainForm.control} name="samples" render={({ field }) => (
                       <FormItem>
                         <div className="flex justify-between items-center mb-2">
-                          <FormLabel className="text-base">Data Samples</FormLabel>
+                          <FormLabel className="text-base">數據樣本數 (Samples)</FormLabel>
                           <span className="text-sm font-mono font-bold text-primary bg-primary/10 px-2 py-1 rounded">{field.value}</span>
                         </div>
                         <FormControl>
@@ -203,7 +215,7 @@ export default function Home() {
                     <FormField control={trainForm.control} name="noise" render={({ field }) => (
                       <FormItem>
                         <div className="flex justify-between items-center mb-2">
-                          <FormLabel className="text-base">Noise Level (Uncertainty)</FormLabel>
+                          <FormLabel className="text-base">雜訊程度 (Noise/Pain)</FormLabel>
                           <span className="text-sm font-mono font-bold text-primary bg-primary/10 px-2 py-1 rounded">{(field.value * 100).toFixed(0)}%</span>
                         </div>
                         <FormControl>
@@ -214,7 +226,7 @@ export default function Home() {
                     <FormField control={trainForm.control} name="epochs" render={({ field }) => (
                       <FormItem>
                         <div className="flex justify-between items-center mb-2">
-                          <FormLabel className="text-base">Training Epochs</FormLabel>
+                          <FormLabel className="text-base">訓練輪數 (Epochs)</FormLabel>
                           <span className="text-sm font-mono font-bold text-primary bg-primary/10 px-2 py-1 rounded">{field.value}</span>
                         </div>
                         <FormControl>
@@ -223,9 +235,7 @@ export default function Home() {
                       </FormItem>
                     )} />
                     <Button type="submit" variant="secondary" className="w-full h-12 rounded-xl" disabled={trainMutation.isPending}>
-                      {trainMutation.isPending ? (
-                        <span className="flex items-center gap-2"><RefreshCcw className="w-4 h-4 animate-spin" /> Retraining Weights...</span>
-                      ) : "Re-Initialize & Train Model"}
+                      {trainMutation.isPending ? "模型訓練中 (Training...)" : "重新訓練模型 (Retrain Model)"}
                     </Button>
                   </form>
                 </Form>
@@ -234,37 +244,91 @@ export default function Home() {
           </TabsContent>
 
           <TabsContent value="analytics">
-            <Card className="border-border/50 shadow-xl shadow-black/5 rounded-3xl overflow-hidden">
-              <CardHeader>
-                <CardTitle>Loss Convergence</CardTitle>
-                <CardDescription>Visualization of Mean Squared Error (MSE) over training iterations</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col items-center bg-white p-6">
-                <img key={lossCurve} src={lossCurve} alt="Loss Curve" className="max-w-full h-auto rounded-xl border border-border/20 shadow-sm" />
-                <div className="mt-6 p-4 bg-muted/30 rounded-xl text-sm text-muted-foreground max-w-2xl text-center italic">
-                  "The loss curve represents the model's 'pain' or error. As it decreases, the model is successfully learning the underlying patterns of the property market."
-                </div>
-              </CardContent>
-            </Card>
+            <div className="grid lg:grid-cols-2 gap-8">
+              <Card className="border-border/50 shadow-xl shadow-black/5 rounded-3xl overflow-hidden">
+                <CardHeader>
+                  <CardTitle>損失函數收斂 (Loss Curve)</CardTitle>
+                  <CardDescription>MSE 隨訓練輪數下降的情況</CardDescription>
+                </CardHeader>
+                <CardContent className="bg-white p-4">
+                  <img 
+                    key={lossCurve} 
+                    src={lossCurve} 
+                    alt="Loss Curve" 
+                    className="w-full h-auto rounded-xl border border-border/20" 
+                    onError={(e) => {
+                      // Fallback if image doesn't exist yet
+                      (e.target as HTMLImageElement).src = "https://placehold.co/600x400?text=Loss+Curve+Loading...";
+                    }}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card className="border-border/50 shadow-xl shadow-black/5 rounded-3xl overflow-hidden">
+                <CardHeader>
+                  <CardTitle>為什麼需要 ReLU 激活函數？</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    如果只使用線性運算（加法和乘法），無論堆疊多少層，最終結果仍等同於一個單層線性變換：
+                  </p>
+                  <div className="bg-muted p-4 rounded-xl font-mono text-xs">
+                    f(x) = W2(W1·x + b1) + b2<br/>
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= (W2·W1)·x + (W2·b1 + b2)<br/>
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= W'·x + b'
+                  </div>
+                  <p className="text-sm font-medium">
+                    ReLU 引入非線性，讓網絡能夠學習複雜的非線性關係，例如房價與坪數之間可能存在的邊際效益遞減。
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           <TabsContent value="code">
-            <Card className="bg-slate-950 text-slate-50 border-none rounded-3xl overflow-hidden shadow-2xl">
-              <CardHeader className="border-b border-slate-800/50">
-                <CardTitle className="text-slate-50 flex items-center gap-2 font-mono"><Code className="w-5 h-5 text-blue-400" /> model.py</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <pre className="text-sm font-mono overflow-x-auto p-6 bg-slate-950/50 leading-relaxed">
-                  <code className="text-blue-200">{CODE_SNIPPET}</code>
-                </pre>
-              </CardContent>
-            </Card>
+            <div className="space-y-8">
+              <Card className="bg-slate-950 text-slate-50 border-none rounded-3xl overflow-hidden shadow-2xl">
+                <CardHeader className="border-b border-slate-800/50">
+                  <CardTitle className="text-slate-50 flex items-center justify-between">
+                    <span>模型摘要 (Model Summary)</span>
+                    <span className="text-xs bg-slate-800 px-2 py-1 rounded text-slate-400">HousePriceNN</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6 space-y-4 font-mono text-sm text-blue-200">
+                  <div className="space-y-1">
+                    <div>(layer1): Linear(in_features=3, out_features=64)</div>
+                    <div>(relu1): ReLU()</div>
+                    <div>(layer2): Linear(in_features=64, out_features=32)</div>
+                    <div>(relu2): ReLU()</div>
+                    <div>(layer3): Linear(in_features=32, out_features=16)</div>
+                    <div>(relu3): ReLU()</div>
+                    <div>(output_layer): Linear(in_features=16, out_features=1)</div>
+                  </div>
+                  <div className="pt-4 border-t border-slate-800 flex justify-between text-slate-400">
+                    <div>總參數數量: <span className="text-white">2,881</span></div>
+                    <div>可訓練參數: <span className="text-white">2,881</span></div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-slate-950 text-slate-50 border-none rounded-3xl overflow-hidden shadow-2xl">
+                <CardHeader className="border-b border-slate-800/50">
+                  <CardTitle className="text-slate-50 flex items-center gap-2"><Code className="w-5 h-5 text-blue-400" /> PyTorch Implementation</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <pre className="text-xs sm:text-sm font-mono overflow-x-auto p-6 bg-slate-950/50 leading-relaxed">
+                    <code className="text-blue-200">{CODE_SNIPPET}</code>
+                  </pre>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
       </div>
     </div>
   );
 }
+
 
 function RefreshCcw(props: any) {
   return (
